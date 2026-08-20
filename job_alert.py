@@ -1,32 +1,19 @@
 import os
 import json
 import smtplib
+import urllib.parse
 import requests
+from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 
 # ==================== SETTINGS ====================
 SENDER_EMAIL = "dmatthewray@gmail.com"
 RECEIVER_EMAIL = "dmatthewray@gmail.com"
+# This securely reads your hidden password from GitHub's vault
 EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD") 
 # ==================================================
 
 SEEN_JOBS_FILE = "seen_jobs_final.json"
-
-# Highly targeted keywords based on your exact profile needs
-TARGET_KEYWORDS = [
-    "sales operations", "incentive compensation", "sales compensation", 
-    "commission", "sales incentive", "sip", "revenue operations", "commercial operations"
-]
-
-# 25 massive companies to instantly track across Greenhouse and Lever
-GREENHOUSE_COMPANIES = [
-    "airbnb", "figma", "stripe", "uber", "pinterest", "doorback", "hubspot",
-    "squarespace", "snapchat", "okta", "datadog", "cloudera", "gusto", "asana"
-]
-LEVER_COMPANIES = [
-    "vercel", "palantir", "coderpad", "netflix", "atlassian", "figment", "mural",
-    "shopify", "twitch", "monitoring", "outreach"
-]
 
 def load_seen_jobs():
     if os.path.exists(SEEN_JOBS_FILE):
@@ -39,9 +26,9 @@ def save_seen_jobs(seen_jobs):
     with open(SEEN_JOBS_FILE, "w") as f:
         json.dump(list(seen_jobs), f)
 
-def send_email(job_title, company, job_url):
-    subject = f"🚨 New Job: {job_title} at {company.upper()}"
-    body = f"A new matching position was found!\n\nRole: {job_title}\nCompany: {company.upper()}\n\nApply here: {job_url}"
+def send_email(job_title, job_url):
+    subject = f"🚨 New ATS Job Match: {job_title}"
+    body = f"A matching role was found!\n\nRole: {job_title}\n\nView Post: {job_url}"
     
     msg = MIMEText(body)
     msg["Subject"] = subject
@@ -49,50 +36,64 @@ def send_email(job_title, company, job_url):
     msg["To"] = RECEIVER_EMAIL
 
     try:
-        with smtplib.SMTP_SSL("://gmail.com", 465) as server:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(SENDER_EMAIL, EMAIL_PASSWORD)
             server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
-        print(f"📧 Email sent for: {job_title} at {company}")
+        print(f"📧 Email sent for: {job_title}")
     except Exception as e:
         print(f"❌ Email failed: {e}")
 
-def check_greenhouse(company, seen_jobs):
-    url = f"https://greenhouse.io{company}/jobs"
+def scan_ats_platform(platform_domain, titles_query, locations_query, seen_jobs):
+    """Scans Google for all open roles across a platform with no time limits."""
+    search_query = f"site:{platform_domain} {titles_query} {locations_query}"
+    encoded_query = urllib.parse.quote_plus(search_query)
+    
+    # NO TIME LIMITS: The &tbs time filter has been completely removed
+    url = f"https://google.com{encoded_query}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
     try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            for job in response.json().get("jobs", []):
-                title = job.get("title", "")
-                # Check keywords and look for Remote preference
-                if any(k in title.lower() for k in TARGET_KEYWORDS):
-                    job_id = f"gh_{job.get('id')}"
-                    if job_id not in seen_jobs:
-                        send_email(title, company, job.get("absolute_url", ""))
-                        seen_jobs.add(job_id)
-    except: pass
-
-def check_lever(company, seen_jobs):
-    url = f"https://lever.co{company}?mode=json"
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            for job in response.json():
-                title = job.get("text", "")
-                if any(k in title.lower() for k in TARGET_KEYWORDS):
-                    job_id = f"lever_{job.get('id')}"
-                    if job_id not in seen_jobs:
-                        send_email(title, company, job.get("hostedUrl", ""))
-                        seen_jobs.add(job_id)
-    except: pass
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code != 200: return
+        soup = BeautifulSoup(response.text, "html.parser")
+        for g in soup.find_all('div', class_='g'):
+            anchors = g.find_all('a')
+            if anchors:
+                link = anchors['href']
+                title_box = g.find('h3')
+                if title_box and link and link.startswith('http'):
+                    title = title_box.text
+                    if link not in seen_jobs:
+                        print(f"✨ Match found on {platform_domain}: {title}")
+                        send_email(title, link)
+                        seen_jobs.add(link)
+    except:
+        pass
 
 def main():
-    print("🔄 Starting bulletproof API job scan...")
+    print("🔄 Starting universal web-wide ATS scan (All Historical Posts)...")
     seen_jobs = load_seen_jobs()
     
-    for company in GREENHOUSE_COMPANIES:
-        check_greenhouse(company, seen_jobs)
-    for company in LEVER_COMPANIES:
-        check_lever(company, seen_jobs)
+    # Your target title clusters
+    titles = '("Sales Operations" OR "Incentive Compensation" OR "Sales Compensation" OR "Revenue Operations" OR "Commercial Operations" OR "Commission" OR "Sales Incentive" OR "SIP") ("Manager" OR "Analyst")'
+    
+    # Your location boundaries near 66221 + strict remote rules
+    locations = '("66221" OR "Overland Park" OR "Olathe" OR "Leawood" OR "Lenexa" OR "Kansas City" OR ("remote" NOT "hybrid"))'
+    
+    # Complete list of major enterprise and startup platforms across the web
+    ats_platforms = [
+        "boards.greenhouse.io", "jobs.lever.co", "://smartrecruiters.com", 
+        "ashbyhq.com", "myworkdayjobs.com", "icims.com", "://workable.com", 
+        "://bamboohr.com", "breezy.hr", "recruitee.com", "teamtailor.com", 
+        "jazzhr.com", "jobvite.com", "://rippling.com", "paylocity.com", 
+        "oraclecloud.com", "://jobadder.com", "manatal.com", "jobdiva.com"
+    ]
+    
+    for platform in ats_platforms:
+        scan_ats_platform(platform, titles, locations, seen_jobs)
         
     save_seen_jobs(seen_jobs)
     print("🏁 Scan complete.")
