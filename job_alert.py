@@ -35,7 +35,7 @@ def send_email(job_title, job_url):
     msg["To"] = RECEIVER_EMAIL
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        with smtplib.SMTP_SSL("://gmail.com", 465) as server:
             server.login(SENDER_EMAIL, EMAIL_PASSWORD)
             server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
         print(f"📧 Email sent for: {job_title}")
@@ -54,19 +54,21 @@ def scan_ats_platform(platform_domain, titles_query, locations_query, seen_jobs)
     try:
         response = requests.get(url, headers=headers, timeout=15)
         if response.status_code != 200: 
-            print(f"⚠️ Tracking limit reached for platform: {platform_domain}")
+            print(f"⚠️ Limit hit for: {platform_domain}")
             return
         
         soup = BeautifulSoup(response.text, "html.parser")
         results = soup.find_all('a', class_='result__url')
-        print(f"🔍 Checking {platform_domain}... Parsing web containers.")
+        print(f"🔍 Checking {platform_domain}... Parsing {len(results)} layout elements.")
         
         for r in results:
             link = r.get('href', '')
             if 'uddg=' in link:
-                # Decodes the hidden redirection parameter link path safely
-                real_link = link.split('uddg=')[1].split('&')[0]
-                link = urllib.parse.unquote(real_link)
+                # FIXED: Rewrote path extraction loop to prevent hidden code crashes
+                parts = link.split('uddg=')
+                if len(parts) > 1:
+                    real_url = parts[1].split('&')[0]
+                    link = urllib.parse.unquote(real_url)
                 
             title_box = r.find_parent('div', class_='result__body')
             if not title_box:
@@ -89,33 +91,15 @@ def main():
     print("🔄 Starting universal web-wide unblockable scan...")
     seen_jobs = load_seen_jobs()
     
-    # Restored title clusters
     titles = '("Sales Operations" OR "Incentive Compensation" OR "Sales Compensation" OR "Revenue Operations" OR "Commercial Operations" OR "Commission" OR "Sales Incentive" OR "SIP") ("Manager" OR "Analyst")'
-    
-    # Restored regional parameters
     locations = '("66221" OR "Overland Park" OR "Olathe" OR "Leawood" OR "Lenexa" OR "Kansas City" OR "remote")'
     
-    # RESTORED: Every single platform warehouse destination you originally defined
     ats_platforms = [
-        "boards.greenhouse.io", 
-        "jobs.lever.co", 
-        "://smartrecruiters.com", 
-        "ashbyhq.com", 
-        "myworkdayjobs.com", 
-        "icims.com", 
-        "://workable.com", 
-        "://bamboohr.com", 
-        "breezy.hr", 
-        "recruitee.com", 
-        "teamtailor.com", 
-        "jazzhr.com", 
-        "jobvite.com", 
-        "://rippling.com", 
-        "paylocity.com", 
-        "oraclecloud.com", 
-        "://jobadder.com", 
-        "manatal.com", 
-        "jobdiva.com"
+        "boards.greenhouse.io", "jobs.lever.co", "://smartrecruiters.com", 
+        "ashbyhq.com", "myworkdayjobs.com", "icims.com", "://workable.com", 
+        "://bamboohr.com", "breezy.hr", "recruitee.com", "teamtailor.com", 
+        "jazzhr.com", "jobvite.com", "://rippling.com", "paylocity.com", 
+        "oraclecloud.com", "://jobadder.com", "manatal.com", "jobdiva.com"
     ]
     
     for platform in ats_platforms:
