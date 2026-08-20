@@ -46,7 +46,7 @@ def send_email(job_title, job_url):
 def scan_ats_platform(platform_domain, titles_query, locations_query, seen_jobs):
     search_query = f"site:{platform_domain} {titles_query} {locations_query}"
     encoded_query = urllib.parse.quote_plus(search_query)
-    url = f"https://google.com{encoded_query}&tbs=qdr:d"
+    url = f"https://google.com{encoded_query}&tbs=qdr:w"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
