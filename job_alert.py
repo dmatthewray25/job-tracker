@@ -42,12 +42,9 @@ def send_email(job_title, job_url):
     except Exception as e:
         print(f"❌ Email failed: {e}")
 
-def scan_ats_platform(platform_domain, title, location, seen_jobs):
-    """Scans clean, bite-sized queries to prevent parsing crashes."""
-    search_query = f"site:{platform_domain} \"{title}\" \"{location}\""
+def scan_ats_platform(platform_domain, seen_jobs):
+    search_query = f"site:{platform_domain} (Sales Operations OR Incentive Compensation OR Revenue Operations OR Commercial Operations) (Manager OR Analyst) (Overland Park OR Olathe OR Lenexa OR Leawood OR Kansas City OR Remote)"
     encoded_query = urllib.parse.quote_plus(search_query)
-    
-    # Standard clean search directory path structure
     url = f"https://duckduckgo.com{encoded_query}"
     
     headers = {
@@ -55,7 +52,7 @@ def scan_ats_platform(platform_domain, title, location, seen_jobs):
     }
     
     try:
-        response = requests.get(url, headers=headers, timeout=12)
+        response = requests.get(url, headers=headers, timeout=15)
         if response.status_code != 200: 
             return
         
@@ -63,49 +60,62 @@ def scan_ats_platform(platform_domain, title, location, seen_jobs):
         results = soup.find_all('a', class_='result__url')
         
         for r in results:
-            link = r.get('href', '')
-            if 'uddg=' in link:
-                parts = link.split('uddg=')
-                if len(parts) > 1:
-                    real_url = parts[1].split('&')[0]
-                    link = urllib.parse.unquote(real_url)
+            raw_link = r.get('href', '')
+            
+            parsed_url = urllib.parse.urlparse(raw_link)
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            
+            if 'uddg' in query_params:
+                link = query_params['uddg']
+            else:
+                link = raw_link
                 
             title_box = r.find_parent('div', class_='result__body')
             if not title_box:
                 title_box = r.find_parent('div', class_='links_main')
                 
             title_text = "Open ATS Position"
+            snippet_text = ""
             if title_box:
                 title_elem = title_box.find('a', class_='result__title')
                 if title_elem:
                     title_text = title_elem.text.strip()
+                snippet_elem = title_box.find('a', class_='result__snippet')
+                if snippet_elem:
+                    snippet_text = snippet_elem.text.strip()
+            
+            # Combine all texts to search for locations and terms
+            full_text_lower = (title_text + " " + snippet_text + " " + str(link)).lower()
+            
+            local_cities = ["overland park", "olathe", "lenexa", "leawood", "kansas city"]
+            is_local_role = any(city in full_text_lower for city in local_cities)
+            has_hybrid_word = "hybrid" in full_text_lower
+            
+            # FIXED LOGIC: If it's a hybrid role but NOT in your local cities, skip it!
+            if has_hybrid_word and not is_local_role:
+                continue
             
             if link and link.startswith('http') and link not in seen_jobs:
                 print(f"✨ Match found on {platform_domain}: {title_text}")
                 send_email(title_text, link)
                 seen_jobs.add(link)
-    except:
-        pass
+    except Exception as e:
+        print(f"Error checking platform {platform_domain}: {e}")
 
 def main():
-    print("🔄 Starting fresh structured universal ATS scan...")
+    print("🔄 Starting universal non-hybrid ATS scan...")
     seen_jobs = load_seen_jobs()
-    
-    # Core target title components broken up cleanly
-    titles = ["Sales Operations", "Incentive Compensation", "Sales Compensation", "Revenue Operations"]
-    locations = ["Overland Park", "Olathe", "Lenexa", "Kansas City", "Remote"]
     
     ats_platforms = [
         "boards.greenhouse.io", "jobs.lever.co", "://smartrecruiters.com", 
-        "ashbyhq.com", "myworkdayjobs.com", "icims.com", "://workable.com"
+        "ashbyhq.com", "myworkdayjobs.com", "icims.com", "://workable.com",
+        "://bamboohr.com", "breezy.hr", "recruitee.com", "teamtailor.com", 
+        "jazzhr.com", "jobvite.com", "://rippling.com", "paylocity.com", 
+        "oraclecloud.com", "://jobadder.com", "manatal.com", "jobdiva.com"
     ]
     
-    # Loop combinations to keep queries short and fully unblockable
     for platform in ats_platforms:
-        print(f"🔍 Crawling tracking platform: {platform}")
-        for title in titles:
-            for location in locations:
-                scan_ats_platform(platform, title, location, seen_jobs)
+        scan_ats_platform(platform, seen_jobs)
         
     save_seen_jobs(seen_jobs)
     print("🏁 Complete tracking run achieved.")
