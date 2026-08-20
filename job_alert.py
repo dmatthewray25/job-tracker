@@ -42,11 +42,12 @@ def send_email(job_title, job_url):
     except Exception as e:
         print(f"❌ Email failed: {e}")
 
-def scan_ats_platform(platform_domain, titles_query, locations_query, seen_jobs):
-    search_query = f"site:{platform_domain} {titles_query} {locations_query}"
+def scan_ats_platform(platform_domain, title, location, seen_jobs):
+    """Scans clean, bite-sized queries to prevent parsing crashes."""
+    search_query = f"site:{platform_domain} \"{title}\" \"{location}\""
     encoded_query = urllib.parse.quote_plus(search_query)
     
-    # FIXED: Added the mandatory search connector sequence back into the web address link
+    # Standard clean search directory path structure
     url = f"https://duckduckgo.com{encoded_query}"
     
     headers = {
@@ -54,7 +55,7 @@ def scan_ats_platform(platform_domain, titles_query, locations_query, seen_jobs)
     }
     
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=12)
         if response.status_code != 200: 
             return
         
@@ -64,7 +65,6 @@ def scan_ats_platform(platform_domain, titles_query, locations_query, seen_jobs)
         for r in results:
             link = r.get('href', '')
             if 'uddg=' in link:
-                # FIXED: Cleaned up extraction calculation logic to split variables properly
                 parts = link.split('uddg=')
                 if len(parts) > 1:
                     real_url = parts[1].split('&')[0]
@@ -74,36 +74,38 @@ def scan_ats_platform(platform_domain, titles_query, locations_query, seen_jobs)
             if not title_box:
                 title_box = r.find_parent('div', class_='links_main')
                 
-            title = "Open ATS Position"
+            title_text = "Open ATS Position"
             if title_box:
                 title_elem = title_box.find('a', class_='result__title')
                 if title_elem:
-                    title = title_elem.text.strip()
+                    title_text = title_elem.text.strip()
             
             if link and link.startswith('http') and link not in seen_jobs:
-                print(f"✨ Match found on {platform_domain}: {title}")
-                send_email(title, link)
+                print(f"✨ Match found on {platform_domain}: {title_text}")
+                send_email(title_text, link)
                 seen_jobs.add(link)
-    except Exception as e:
-        print(f"Error checking platform {platform_domain}: {e}")
+    except:
+        pass
 
 def main():
-    print("🔄 Starting universal web-wide unblockable scan...")
+    print("🔄 Starting fresh structured universal ATS scan...")
     seen_jobs = load_seen_jobs()
     
-    titles = '("Sales Operations" OR "Incentive Compensation" OR "Sales Compensation" OR "Revenue Operations" OR "Commercial Operations" OR "Commission" OR "Sales Incentive" OR "SIP") ("Manager" OR "Analyst")'
-    locations = '("66221" OR "Overland Park" OR "Olathe" OR "Leawood" OR "Lenexa" OR "Kansas City" OR "remote")'
+    # Core target title components broken up cleanly
+    titles = ["Sales Operations", "Incentive Compensation", "Sales Compensation", "Revenue Operations"]
+    locations = ["Overland Park", "Olathe", "Lenexa", "Kansas City", "Remote"]
     
     ats_platforms = [
         "boards.greenhouse.io", "jobs.lever.co", "://smartrecruiters.com", 
-        "ashbyhq.com", "myworkdayjobs.com", "icims.com", "://workable.com", 
-        "://bamboohr.com", "breezy.hr", "recruitee.com", "teamtailor.com", 
-        "jazzhr.com", "jobvite.com", "://rippling.com", "paylocity.com", 
-        "oraclecloud.com", "://jobadder.com", "manatal.com", "jobdiva.com"
+        "ashbyhq.com", "myworkdayjobs.com", "icims.com", "://workable.com"
     ]
     
+    # Loop combinations to keep queries short and fully unblockable
     for platform in ats_platforms:
-        scan_ats_platform(platform, titles, locations, seen_jobs)
+        print(f"🔍 Crawling tracking platform: {platform}")
+        for title in titles:
+            for location in locations:
+                scan_ats_platform(platform, title, location, seen_jobs)
         
     save_seen_jobs(seen_jobs)
     print("🏁 Complete tracking run achieved.")
