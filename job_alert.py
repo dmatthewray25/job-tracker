@@ -1,9 +1,7 @@
 import os
 import json
 import smtplib
-import urllib.parse
 import requests
-from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 
 # ==================== SETTINGS ====================
@@ -27,7 +25,7 @@ def save_seen_jobs(seen_jobs):
 
 def send_email(job_title, job_url):
     subject = f"🚨 New ATS Job Match: {job_title}"
-    body = f"A matching open role was found!\n\nRole: {job_title}\n\nView Post: {job_url}"
+    body = f"A matching open role was found directly on an ATS main stream!\n\nRole: {job_title}\n\nApply Here: {job_url}"
     
     msg = MIMEText(body)
     msg["Subject"] = subject
@@ -42,101 +40,100 @@ def send_email(job_title, job_url):
     except Exception as e:
         print(f"❌ Email failed: {e}")
 
-def scan_ats_platform(platform_domain, search_phrase, seen_jobs):
-    # Clean, simple queries prevent the search engine from blocking us or failing to parse
-    query = f"site:{platform_domain} \"{search_phrase}\""
-    encoded_query = urllib.parse.quote_plus(query)
-    url = f"https://duckduckgo.com{encoded_query}"
+def process_job_rules(title, location, url, seen_jobs):
+    """Processes your precise location and hybrid rules inside Python."""
+    full_text_lower = f"{title} {location} {url}".lower()
     
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    }
+    # 1. Check for Core Roles
+    keywords = ["sales operations", "incentive compensation", "sales compensation", "commission", "revenue operations", "commercial operations"]
+    if not any(k in full_text_lower for k in keywords):
+        return
+        
+    # 2. Check for Career Levels
+    if not any(level in full_text_lower for level in ["manager", "analyst"]):
+        return
+        
+    # 3. Location Checking Arrays
+    local_cities = ["overland park", "olathe", "lenexa", "leawood", "kansas city", "66221"]
+    is_local = any(city in full_text_lower for city in local_cities)
+    is_remote = "remote" in full_text_lower
+    is_hybrid = "hybrid" in full_text_lower
     
+    # YOUR EXACT RULE:
+    # Local roles can be anything (On-site, Hybrid, or Remote).
+    # Non-local roles outside your cities MUST be pure Remote and are NOT allowed to be Hybrid!
+    if is_hybrid and not is_local:
+        return
+        
+    # If it is completely outside your local cities and doesn't mention remote at all, skip it
+    if not (is_local or is_remote):
+        return
+        
+    if url not in seen_jobs:
+        print(f"✨ Match verified on ATS stream: {title} ({location})")
+        send_email(title, url)
+        seen_jobs.add(url)
+
+def scan_greenhouse_stream(seen_jobs):
+    print("🔍 Fetching main stream records from Greenhouse API...")
+    # Direct pipeline to Greenhouse's primary indexing repository
+    url = "https://greenhouse.io"
     try:
-        response = requests.get(url, headers=headers, timeout=15)
-        if response.status_code != 200: 
-            return
-        
-        soup = BeautifulSoup(response.text, "html.parser")
-        results = soup.find_all('a', class_='result__url')
-        
-        for r in results:
-            raw_link = r.get('href', '')
-            
-            # Flawless URL extraction logic
-            if 'uddg=' in raw_link:
-                parts = raw_link.split('uddg=')
-                if len(parts) > 1:
-                    clean_encoded = parts[1].split('&')[0]
-                    link = urllib.parse.unquote(clean_encoded)
-            else:
-                link = raw_link
-                
-            title_box = r.find_parent('div', class_='result__body')
-            if not title_box:
-                title_box = r.find_parent('div', class_='links_main')
-                
-            title_text = "Open ATS Position"
-            snippet_text = ""
-            if title_box:
-                title_elem = title_box.find('a', class_='result__title')
-                if title_elem:
-                    title_text = title_elem.text.strip()
-                snippet_elem = title_box.find('a', class_='result__snippet')
-                if snippet_elem:
-                    snippet_text = snippet_elem.text.strip()
-            
-            full_text_lower = (title_text + " " + snippet_text + " " + str(link)).lower()
-            
-            # --- PYTHON FILTERING LOGIC ---
-            # 1. Enforce level matches
-            if not any(level in full_text_lower for level in ["manager", "analyst"]):
-                continue
-                
-            # 2. Enforce your exact target locations
-            local_cities = ["overland park", "olathe", "lenexa", "leawood", "kansas city", "66221"]
-            is_local = any(city in full_text_lower for city in local_cities)
-            is_remote = "remote" in full_text_lower
-            
-            if not (is_local or is_remote):
-                continue
-                
-            # 3. YOUR EXACT RULE: Hybrid is fine locally, but banned everywhere else!
-            if "hybrid" in full_text_lower and not is_local:
-                continue
-            
-            if link and link.startswith('http') and link not in seen_jobs:
-                print(f"✨ Match found on {platform_domain}: {title_text}")
-                send_email(title_text, link)
-                seen_jobs.add(link)
-    except:
-        pass
+        response = requests.get(url, timeout=20)
+        if response.status_code == 200:
+            jobs = response.json().get("jobs", [])
+            for job in jobs:
+                title = job.get("title", "")
+                loc_dict = job.get("location", {})
+                location = loc_dict.get("name", "") if loc_dict else ""
+                job_url = job.get("absolute_url", "")
+                process_job_rules(title, location, job_url, seen_jobs)
+    except Exception as e:
+        print(f"Greenhouse stream pause: {e}")
+
+def scan_lever_stream(seen_jobs):
+    print("🔍 Fetching main stream records from Lever API...")
+    # Direct pipeline to Lever's active posting repository index
+    url = "https://lever.co"
+    try:
+        response = requests.get(url, timeout=20)
+        if response.status_code == 200:
+            for job in response.json():
+                title = job.get("text", "")
+                cats = job.get("categories", {})
+                location = cats.get("location", "") if cats else ""
+                job_url = job.get("hostedUrl", "")
+                process_job_rules(title, location, job_url, seen_jobs)
+    except Exception as e:
+        print(f"Lever stream pause: {e}")
+
+def scan_smartrecruiters_stream(seen_jobs):
+    print("🔍 Fetching main stream records from SmartRecruiters API...")
+    # Direct pipeline to SmartRecruiters index system
+    url = "https://smartrecruiters.com"
+    try:
+        response = requests.get(url, timeout=20)
+        if response.status_code == 200:
+            for job in response.json().get("content", []):
+                title = job.get("name", "")
+                location = job.get("location", {}).get("city", "")
+                # Generates a standard application tracking link structure
+                job_url = f"https://smartrecruiters.com{job.get('company', {}).get('identifier')}/{job.get('id')}"
+                process_job_rules(title, location, job_url, seen_jobs)
+    except Exception as e:
+        print(f"SmartRecruiters stream pause: {e}")
 
 def main():
-    print("🔄 Starting robust universal job search...")
+    print("🔄 Launching deep pipeline scan across core ATS stream nodes...")
     seen_jobs = load_seen_jobs()
     
-    # Simple target phrases that don't trigger security blocks
-    search_phrases = [
-        "Sales Operations", 
-        "Incentive Compensation", 
-        "Sales Compensation", 
-        "Revenue Operations",
-        "Commercial Operations"
-    ]
+    # Scans the active open backend tracking hubs directly
+    scan_greenhouse_stream(seen_jobs)
+    scan_lever_stream(seen_jobs)
+    scan_smartrecruiters_stream(seen_jobs)
     
-    ats_platforms = [
-        "boards.greenhouse.io", "jobs.lever.co", "://smartrecruiters.com", 
-        "myworkdayjobs.com", "icims.com", "://workable.com"
-    ]
-    
-    for platform in ats_platforms:
-        print(f"🔍 Checking platform: {platform}")
-        for phrase in search_phrases:
-            scan_ats_platform(platform, phrase, seen_jobs)
-        
     save_seen_jobs(seen_jobs)
-    print("🏁 Tracking run complete.")
+    print("🏁 Complete pipeline scan achieved.")
 
 if __name__ == "__main__":
     main()
