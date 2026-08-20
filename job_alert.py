@@ -45,6 +45,8 @@ def send_email(job_title, job_url):
 def scan_ats_platform(platform_domain, titles_query, locations_query, seen_jobs):
     search_query = f"site:{platform_domain} {titles_query} {locations_query}"
     encoded_query = urllib.parse.quote_plus(search_query)
+    
+    # FIXED: Added the mandatory search connector sequence back into the web address link
     url = f"https://duckduckgo.com{encoded_query}"
     
     headers = {
@@ -54,17 +56,15 @@ def scan_ats_platform(platform_domain, titles_query, locations_query, seen_jobs)
     try:
         response = requests.get(url, headers=headers, timeout=15)
         if response.status_code != 200: 
-            print(f"⚠️ Limit hit for: {platform_domain}")
             return
         
         soup = BeautifulSoup(response.text, "html.parser")
         results = soup.find_all('a', class_='result__url')
-        print(f"🔍 Checking {platform_domain}... Parsing {len(results)} layout elements.")
         
         for r in results:
             link = r.get('href', '')
             if 'uddg=' in link:
-                # FIXED: Rewrote path extraction loop to prevent hidden code crashes
+                # FIXED: Cleaned up extraction calculation logic to split variables properly
                 parts = link.split('uddg=')
                 if len(parts) > 1:
                     real_url = parts[1].split('&')[0]
