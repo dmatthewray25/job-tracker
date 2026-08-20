@@ -2,9 +2,8 @@ name: Run Universal Job Scraper
 
 on:
   schedule:
-    # Runs automatically at 7:00 AM Central Time (12:00 UTC) every single day
     - cron: '0 12 * * *'
-  workflow_dispatch: # Adds a manual run button to your dashboard
+  workflow_dispatch:
 
 jobs:
   run-script:
@@ -18,8 +17,9 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install website parsers
-        run: pip install requests beautifulsoup4
+      - name: Install required tools
+        # FIXED: Added the unblockable search engine tool here
+        run: pip install googlesearch-python requests beautifulsoup4
 
       - name: Execute Scraper and Send Emails
         env:
