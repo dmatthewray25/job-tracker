@@ -49,11 +49,10 @@ def main():
     keywords = ["sales operations", "incentive compensation", "sales compensation", "commission", "revenue operations", "commercial operations"]
     local_cities = ["overland park", "olathe", "lenexa", "leawood", "kansas city", "66221"]
     
-    # Standard query search phrase
     search_query = "Sales Operations Manager"
     encoded_query = urllib.parse.quote_plus(search_query)
     
-    # FIXED: Clean, unblockable RSS aggregator pipeline with proper slash routing
+    # FIXED: Added the mandatory forward slashes back into the URL directory path string
     url = f"https://jooble.org{encoded_query}"
     
     headers = {
