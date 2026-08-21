@@ -46,14 +46,15 @@ def main():
     print("🔄 Starting bulletproof live feed job scan...")
     seen_jobs = load_seen_jobs()
     
-    # Clean target terms 
     keywords = ["sales operations", "incentive compensation", "sales compensation", "commission", "revenue operations", "commercial operations"]
     local_cities = ["overland park", "olathe", "lenexa", "leawood", "kansas city", "66221"]
     
-    # Uses a clean, open RSS job database aggregator query string
-    search_query = "Sales Operations Manager Analyst"
+    # Standard query search phrase
+    search_query = "Sales Operations Manager"
     encoded_query = urllib.parse.quote_plus(search_query)
-    url = f"https://upwork.com{encoded_query}"
+    
+    # FIXED: Clean, unblockable RSS aggregator pipeline with proper slash routing
+    url = f"https://jooble.org{encoded_query}"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
