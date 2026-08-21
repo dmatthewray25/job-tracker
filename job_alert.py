@@ -1,7 +1,9 @@
 import os
 import json
 import smtplib
+import urllib.parse
 import requests
+from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 
 # ==================== SETTINGS ====================
@@ -25,7 +27,7 @@ def save_seen_jobs(seen_jobs):
 
 def send_email(job_title, job_url):
     subject = f"🚨 New ATS Job Match: {job_title}"
-    body = f"A matching open role was found directly on an ATS main stream!\n\nRole: {job_title}\n\nApply Here: {job_url}"
+    body = f"A matching open role was found!\n\nRole: {job_title}\n\nView Post: {job_url}"
     
     msg = MIMEText(body)
     msg["Subject"] = subject
@@ -40,100 +42,71 @@ def send_email(job_title, job_url):
     except Exception as e:
         print(f"❌ Email failed: {e}")
 
-def process_job_rules(title, location, url, seen_jobs):
-    """Processes your precise location and hybrid rules inside Python."""
-    full_text_lower = f"{title} {location} {url}".lower()
-    
-    # 1. Check for Core Roles
-    keywords = ["sales operations", "incentive compensation", "sales compensation", "commission", "revenue operations", "commercial operations"]
-    if not any(k in full_text_lower for k in keywords):
-        return
-        
-    # 2. Check for Career Levels
-    if not any(level in full_text_lower for level in ["manager", "analyst"]):
-        return
-        
-    # 3. Location Checking Arrays
-    local_cities = ["overland park", "olathe", "lenexa", "leawood", "kansas city", "66221"]
-    is_local = any(city in full_text_lower for city in local_cities)
-    is_remote = "remote" in full_text_lower
-    is_hybrid = "hybrid" in full_text_lower
-    
-    # YOUR EXACT RULE:
-    # Local roles can be anything (On-site, Hybrid, or Remote).
-    # Non-local roles outside your cities MUST be pure Remote and are NOT allowed to be Hybrid!
-    if is_hybrid and not is_local:
-        return
-        
-    # If it is completely outside your local cities and doesn't mention remote at all, skip it
-    if not (is_local or is_remote):
-        return
-        
-    if url not in seen_jobs:
-        print(f"✨ Match verified on ATS stream: {title} ({location})")
-        send_email(title, url)
-        seen_jobs.add(url)
-
-def scan_greenhouse_stream(seen_jobs):
-    print("🔍 Fetching main stream records from Greenhouse API...")
-    # Direct pipeline to Greenhouse's primary indexing repository
-    url = "https://greenhouse.io"
-    try:
-        response = requests.get(url, timeout=20)
-        if response.status_code == 200:
-            jobs = response.json().get("jobs", [])
-            for job in jobs:
-                title = job.get("title", "")
-                loc_dict = job.get("location", {})
-                location = loc_dict.get("name", "") if loc_dict else ""
-                job_url = job.get("absolute_url", "")
-                process_job_rules(title, location, job_url, seen_jobs)
-    except Exception as e:
-        print(f"Greenhouse stream pause: {e}")
-
-def scan_lever_stream(seen_jobs):
-    print("🔍 Fetching main stream records from Lever API...")
-    # Direct pipeline to Lever's active posting repository index
-    url = "https://lever.co"
-    try:
-        response = requests.get(url, timeout=20)
-        if response.status_code == 200:
-            for job in response.json():
-                title = job.get("text", "")
-                cats = job.get("categories", {})
-                location = cats.get("location", "") if cats else ""
-                job_url = job.get("hostedUrl", "")
-                process_job_rules(title, location, job_url, seen_jobs)
-    except Exception as e:
-        print(f"Lever stream pause: {e}")
-
-def scan_smartrecruiters_stream(seen_jobs):
-    print("🔍 Fetching main stream records from SmartRecruiters API...")
-    # Direct pipeline to SmartRecruiters index system
-    url = "https://smartrecruiters.com"
-    try:
-        response = requests.get(url, timeout=20)
-        if response.status_code == 200:
-            for job in response.json().get("content", []):
-                title = job.get("name", "")
-                location = job.get("location", {}).get("city", "")
-                # Generates a standard application tracking link structure
-                job_url = f"https://smartrecruiters.com{job.get('company', {}).get('identifier')}/{job.get('id')}"
-                process_job_rules(title, location, job_url, seen_jobs)
-    except Exception as e:
-        print(f"SmartRecruiters stream pause: {e}")
-
 def main():
-    print("🔄 Launching deep pipeline scan across core ATS stream nodes...")
+    print("🔄 Starting bulletproof live feed job scan...")
     seen_jobs = load_seen_jobs()
     
-    # Scans the active open backend tracking hubs directly
-    scan_greenhouse_stream(seen_jobs)
-    scan_lever_stream(seen_jobs)
-    scan_smartrecruiters_stream(seen_jobs)
+    # Clean target terms 
+    keywords = ["sales operations", "incentive compensation", "sales compensation", "commission", "revenue operations", "commercial operations"]
+    local_cities = ["overland park", "olathe", "lenexa", "leawood", "kansas city", "66221"]
     
+    # Uses a clean, open RSS job database aggregator query string
+    search_query = "Sales Operations Manager Analyst"
+    encoded_query = urllib.parse.quote_plus(search_query)
+    url = f"https://upwork.com{encoded_query}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code != 200:
+            print(f"⚠️ Feed access paused by server code: {response.status_code}")
+            return
+            
+        soup = BeautifulSoup(response.text, "xml")
+        items = soup.find_all("item")
+        print(f"🔍 Reading active live data index stream... Processing {len(items)} listings.")
+        
+        for item in items:
+            title = item.find("title").text if item.find("title") else "Open Position"
+            link = item.find("link").text if item.find("link") else ""
+            description = item.find("description").text if item.find("description") else ""
+            
+            full_text_lower = f"{title} {description}".lower()
+            
+            # --- CRITERIA MATCHING PIPELINE ---
+            # 1. Title Term Verification
+            if not any(k in full_text_lower for k in keywords):
+                continue
+                
+            # 2. Level Verification
+            if not any(level in full_text_lower for level in ["manager", "analyst"]):
+                continue
+                
+            # 3. Location and Hybrid Rules Check
+            is_local = any(city in full_text_lower for city in local_cities)
+            is_remote = "remote" in full_text_lower
+            is_hybrid = "hybrid" in full_text_lower
+            
+            # YOUR EXACT RULE: Hybrid is totally fine if local, but strictly banned if it's outside your area!
+            if is_hybrid and not is_local:
+                continue
+                
+            if not (is_local or is_remote):
+                continue
+                
+            if link and link not in seen_jobs:
+                print(f"✨ Match verified on feed: {title}")
+                send_email(title, link)
+                seen_jobs.add(link)
+                
+    except Exception as e:
+        print(f"❌ System error during live feed parse: {e}")
+        
     save_seen_jobs(seen_jobs)
-    print("🏁 Complete pipeline scan achieved.")
+    print("🏁 Tracking run complete.")
 
 if __name__ == "__main__":
     main()
